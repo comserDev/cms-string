@@ -77,13 +77,14 @@ if (queue.pop(val)) {
 }
 ```
 
-### 4. 고성능 비동기 로거 (Logger)
+### 4. 고성능 비동기 로거 (AsyncLogger)
 
 ```cpp
-#include <cmsLogger.h>
+#include <cmsAsyncLogger.h>
 
-// 전역 로거 설정
-logger.begin(cms::LogLevel::DEBUG);
+// 로거 인스턴스 획득 및 설정
+auto& logger = cms::AsyncLogger<>::instance();
+logger.begin(cms::LogLevel::Debug);
 
 // 로그 출력 (자동 스타일링 및 태그 지원)
 logger.i("시스템 시작... [Network] 연결됨");

@@ -31,8 +31,8 @@ protected:
 };
 
 int main() {
-    // 1. 로거 초기화 (전역 객체 'logger' 사용)
-    // 기본값: MSG_SIZE=128, QUEUE_DEPTH=16
+    // 1. 로거 인스턴스 획득 및 초기화
+    auto& logger = cms::AsyncLogger<>::instance();
     logger.begin(cms::LogLevel::Debug);
     logger.setUseColor(true); // ANSI 색상 활성화
 

@@ -58,6 +58,7 @@ void checkCommand(cms::String<64>& input) {
 가장 깔끔하고 안전하게 문자열을 분리하여 고정 크기 배열에 담습니다.
 ```cpp
 void parseConfig(const char* line) {
+    auto& logger = cms::AsyncLogger<>::instance();
     cms::String<64> src = line; // 예: "SSID:MyHome:WPA2"
     cms::String<32> params[3];
 
@@ -295,6 +296,7 @@ void sendJsonStatus(int id, float temp) {
 ### 6.3 명령어 히스토리 관리
 ```cpp
 cms::Queue<cms::String<32>, 5> history;
+auto& logger = cms::AsyncLogger<>::instance();
 
 void onCommand(const char* cmd) {
     cms::String<32> s = cmd;

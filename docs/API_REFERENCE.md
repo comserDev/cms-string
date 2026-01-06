@@ -60,6 +60,7 @@
 Thin Template 패턴이 적용된 고성능 비동기 로거입니다.
 
 ### 설정 및 제어
+- `static AsyncLogger& instance()`: 기본 크기(256, 16)의 싱글톤 인스턴스를 반환합니다.
 - `void begin(LogLevel level)`: 로거를 초기화하고 최소 출력 레벨을 설정합니다.
 - `void setRuntimeLevel(LogLevel level)`: 실행 중에 로그 출력 레벨을 변경합니다.
 - `void setUseColor(bool useColor)`: ANSI 색상 코드 사용 여부를 설정합니다.
