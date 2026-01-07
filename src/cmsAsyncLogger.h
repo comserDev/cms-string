@@ -26,12 +26,6 @@ namespace cms {
     class LoggerBase {
     public:
         /**
-         * @brief 커스텀 로그 처리 콜백 타입
-         * @return true: 핸들러가 로그를 처리함, false: 로거가 기본 큐에 저장해야 함
-         */
-        using HandlerFunc = bool (*)(LoggerBase&, const cms::StringBase&);
-
-        /**
          * @brief 로거를 초기화합니다.
          *
          * @param level 초기 런타임 로그 레벨 (기본값: Debug)
@@ -48,9 +42,6 @@ namespace cms {
         bool isUsingColor() const noexcept { return _useColor; }
         /// @brief setRuntimeLevel의 별칭입니다.
         void setLogLevel(LogLevel level) noexcept;
-
-        /// @brief 커스텀 핸들러를 설정합니다.
-        void setHandler(HandlerFunc handler) noexcept { _handler = handler; }
 
         // ---------------------------------------------------------
         // [i/d/w/e] 편리한 로그 출력을 위한 헬퍼 메서드 (Base로 이동)
@@ -70,7 +61,20 @@ namespace cms {
         bool _timeSynced = false;
         bool _useColor = true;
         LogLevel _runtimeLevel = LogLevel::Debug;
-        HandlerFunc _handler = nullptr;
+
+        /**
+         * @brief 로그가 비동기 큐에 쌓이기 전 필터링하거나 가로채기 위한 가상 함수입니다.
+         *
+         * @param msg 가공(타임스탬프, 레벨 배지, 스타일링 등)이 완료된 최종 로그 메시지
+         * @return
+         *   - true: 로그 처리를 여기서 완료함. 로거는 이 메시지를 내부 큐에 저장하지 않습니다.
+         *          (특정 키워드 필터링, 보안 로그 차단, 또는 즉시 전송 시 사용)
+         *   - false: 로거가 메시지를 내부 큐에 저장하도록 허용합니다. (기본값)
+         *
+         * @note 이 함수 내부에서 `pushToQueue()`를 호출하여 조건에 따라 메시지를
+         *       수동으로 큐에 넣거나, 내용을 수정하여 다시 투입할 수 있습니다.
+         */
+        virtual bool handleLog(const cms::StringBase& msg) { (void)msg; return false; }
 
         // StringBase&를 사용하여 MSG_SIZE에 상관없이 동일한 코드를 공유합니다.
         const char* getLevelString(LogLevel level) noexcept;
@@ -93,8 +97,6 @@ namespace cms {
     template <uint16_t MSG_SIZE = 256, uint8_t QUEUE_DEPTH = 16>
     class AsyncLogger : public LoggerBase {
     public:
-        using HandlerFunc = LoggerBase::HandlerFunc;
-
         static AsyncLogger& instance() {
             static AsyncLogger inst;
             return inst;
@@ -119,9 +121,3 @@ namespace cms {
 
 // 템플릿 구현부 포함 (컴파일을 위해 헤더 하단에 위치)
 #include "cmsAsyncLogger.tpp"
-
-// ==================================================================================================
-// [Global Logger Instance]
-// logger.i(...)와 같이 편리하게 사용할 수 있도록 전역 참조 객체를 제공합니다.
-// ==================================================================================================
-inline cms::AsyncLogger<>& logger = cms::AsyncLogger<>::instance();
