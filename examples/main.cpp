@@ -99,8 +99,7 @@ int main() {
 
     // 커스텀 로거 인스턴스 사용
     MyCustomLogger myLog;
-    myLog.begin(cms::LogLevel::Debug);
-    myLog.setUseColor(true);
+    myLog.begin(cms::LogLevel::Debug, true);
 
     // 다양한 레벨의 로그 출력
     // printf 형식을 사용하여 동적 데이터를 포함할 수 있습니다.
@@ -114,7 +113,7 @@ int main() {
     // 로그는 즉시 출력되지 않고 내부 큐에 저장됩니다.
     // 실제 출력은 CPU 여유가 있을 때(Idle task 등) 아래 함수를 호출하여 수행합니다.
     std::cout << "\n[Processing Logs...]" << std::endl;
-    while (myLog.processNextLog()) {
+    while (myLog.update()) {
         // 큐가 빌 때까지 로그를 하나씩 꺼내 출력합니다.
     }
 

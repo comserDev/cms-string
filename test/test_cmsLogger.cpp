@@ -33,8 +33,7 @@ protected:
 int main() {
     // 1. 로거 인스턴스 획득 및 초기화
     auto& logger = cms::AsyncLogger<>::instance();
-    logger.begin(cms::LogLevel::Debug);
-    logger.setUseColor(true); // ANSI 색상 활성화
+    logger.begin(cms::LogLevel::Debug, true);
 
     std::cout << "=== Test 1: 기본 로깅 및 자동 스타일링 ===" << std::endl;
     logger.d("디버그 메시지입니다. (Code: %d)", 101);
@@ -43,7 +42,7 @@ int main() {
     logger.e("에러 발생: FATAL 오류가 감지되었습니다."); // FATAL은 강조 키워드
 
     // 비동기 로거이므로 큐에 쌓인 내용을 명시적으로 출력 (실제 환경에선 백그라운드 루프가 수행)
-    while (logger.processNextLog());
+    while (logger.update());
 
     std::cout << "\n=== Test 2: 런타임 로그 레벨 필터링 ===" << std::endl;
     logger.setRuntimeLevel(cms::LogLevel::Warn);
@@ -51,7 +50,7 @@ int main() {
     logger.i("이 정보 로그는 출력되지 않아야 합니다.");
     logger.w("이 경고 로그는 출력되어야 합니다.");
 
-    while (logger.processNextLog());
+    while (logger.update());
 
     std::cout << "\n=== Test 3: 커스텀 핸들러 (Dispatch) 테스트 ===" << std::endl;
     TestLogger testLog;
@@ -61,7 +60,7 @@ int main() {
     testLog.e("이 로그는 SECRET 정보를 포함하고 있어 차단됩니다.");
     testLog.w("이것은 CRITICAL 경고입니다.");
 
-    while (testLog.processNextLog());
+    while (testLog.update());
 
     std::cout << "\n=== Test 4: 큐 오버플로우 테스트 ===" << std::endl;
 
@@ -71,7 +70,7 @@ int main() {
     }
 
     std::cout << "큐에 저장된 마지막 16개의 로그만 출력됩니다:" << std::endl;
-    while (logger.processNextLog());
+    while (logger.update());
 
     return 0;
 }

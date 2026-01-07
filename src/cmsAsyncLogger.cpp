@@ -27,7 +27,10 @@ namespace {
 
 namespace cms {
 
-    void LoggerBase::begin(LogLevel level) noexcept { _runtimeLevel = level; }
+    void LoggerBase::begin(LogLevel level, bool useColor) noexcept {
+        _runtimeLevel = level;
+        _useColor = useColor;
+    }
     void LoggerBase::systemTimeSynced(bool synced) noexcept { _timeSynced = synced; }
     void LoggerBase::setRuntimeLevel(LogLevel level) noexcept { _runtimeLevel = level; }
     void LoggerBase::setUseColor(bool useColor) noexcept { _useColor = useColor; }

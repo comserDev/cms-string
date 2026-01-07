@@ -61,7 +61,7 @@ Thin Template 패턴이 적용된 고성능 비동기 로거입니다.
 
 ### 설정 및 제어
 - `static AsyncLogger& instance()`: 기본 크기(256, 16)의 싱글톤 인스턴스를 반환합니다.
-- `void begin(LogLevel level)`: 로거를 초기화하고 최소 출력 레벨을 설정합니다.
+- `void begin(LogLevel level, bool useColor = true)`: 로거를 초기화하고 출력 레벨 및 색상 사용 여부를 설정합니다.
 - `void setRuntimeLevel(LogLevel level)`: 실행 중에 로그 출력 레벨을 변경합니다.
 - `void setUseColor(bool useColor)`: ANSI 색상 코드 사용 여부를 설정합니다.
 
@@ -73,7 +73,7 @@ Thin Template 패턴이 적용된 고성능 비동기 로거입니다.
 - `log(level, format, ...)`: 지정된 레벨로 로그를 출력합니다.
 
 ### 실행 및 확장
-- `bool processNextLog()`: 큐에서 로그를 하나 꺼내 실제 출력 장치(`outputLog`)로 보냅니다.
+- `bool update()`: 큐에서 로그를 하나 꺼내 실제 출력 장치(`outputLog`)로 보냅니다.
 - `virtual bool handleLog(const StringBase& msg)`: 큐 저장 전 필터링 로직을 재정의합니다.
 - `virtual void outputLog(const StringBase& msg)`: 실제 출력 매체(Serial, TCP 등)를 재정의합니다.
 

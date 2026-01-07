@@ -8,7 +8,7 @@
 namespace cms {
 
     template <uint16_t MSG_SIZE, uint8_t QUEUE_DEPTH>
-    bool AsyncLogger<MSG_SIZE, QUEUE_DEPTH>::processNextLog() {
+    bool AsyncLogger<MSG_SIZE, QUEUE_DEPTH>::update() {
         cms::String<MSG_SIZE> msg;
         if (_queue.pop(msg)) {
             outputLog(msg);

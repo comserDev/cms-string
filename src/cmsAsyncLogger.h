@@ -25,8 +25,19 @@ namespace cms {
     /// 템플릿 인자에 의존하지 않는 공통 로직을 이곳에 모아 .cpp에서 한 번만 컴파일합니다.
     class LoggerBase {
     public:
-        /// @brief 로거를 초기화하고 초기 런타임 로그 레벨을 설정합니다.
-        void begin(LogLevel level) noexcept;
+        /**
+         * @brief 커스텀 로그 처리 콜백 타입
+         * @return true: 핸들러가 로그를 처리함, false: 로거가 기본 큐에 저장해야 함
+         */
+        using HandlerFunc = bool (*)(LoggerBase&, const cms::StringBase&);
+
+        /**
+         * @brief 로거를 초기화합니다.
+         *
+         * @param level 초기 런타임 로그 레벨 (기본값: Debug)
+         * @param useColor ANSI 색상 코드 사용 여부 (기본값: true)
+         */
+        void begin(LogLevel level = LogLevel::Debug, bool useColor = true) noexcept;
         /// @brief 시스템 시간 동기화 여부를 설정합니다.
         void systemTimeSynced(bool synced) noexcept;
         /// @brief 런타임 로그 레벨을 설정합니다.
@@ -37,6 +48,9 @@ namespace cms {
         bool isUsingColor() const noexcept { return _useColor; }
         /// @brief setRuntimeLevel의 별칭입니다.
         void setLogLevel(LogLevel level) noexcept;
+
+        /// @brief 커스텀 핸들러를 설정합니다.
+        void setHandler(HandlerFunc handler) noexcept { _handler = handler; }
 
         // ---------------------------------------------------------
         // [i/d/w/e] 편리한 로그 출력을 위한 헬퍼 메서드 (Base로 이동)
@@ -56,26 +70,7 @@ namespace cms {
         bool _timeSynced = false;
         bool _useColor = true;
         LogLevel _runtimeLevel = LogLevel::Debug;
-
-        /**
-         * @brief 로그가 비동기 큐에 쌓이기 전 필터링하거나 가로채기 위한 가상 함수입니다.
-         *
-         * @param msg 가공(타임스탬프, 레벨 배지, 스타일링 등)이 완료된 최종 로그 메시지
-         * @return
-         *   - true: 로그 처리를 여기서 완료함. 로거는 이 메시지를 내부 큐에 저장하지 않습니다.
-         *          (특정 키워드 필터링, 보안 로그 차단, 또는 즉시 전송 시 사용)
-         *   - false: 로거가 메시지를 내부 큐에 저장하도록 허용합니다. (기본값)
-         *
-         * @note 이 함수 내부에서 `pushToQueue()`를 호출하여 조건에 따라 메시지를
-         *       수동으로 큐에 넣거나, 내용을 수정하여 다시 투입할 수 있습니다.
-         *
-         * @example
-         * bool handleLog(const StringBase& msg) override {
-         *     if (msg.contains("RETRY")) { pushToQueue(msg); return true; }
-         *     return false;
-         * }
-         */
-        virtual bool handleLog(const cms::StringBase& msg) { (void)msg; return false; }
+        HandlerFunc _handler = nullptr;
 
         // StringBase&를 사용하여 MSG_SIZE에 상관없이 동일한 코드를 공유합니다.
         const char* getLevelString(LogLevel level) noexcept;
@@ -88,15 +83,7 @@ namespace cms {
         /// @brief 템플릿 자식 클래스에서 버퍼를 제공받기 위한 가상 함수
         virtual void vlog(LogLevel level, const char* format, va_list args) = 0;
         virtual void dispatchLog(const char* msg) = 0;
-        /**
-         * @brief 큐에서 꺼내진 로그 메시지를 실제 출력 장치로 전송하는 가상 함수입니다.
-         *
-         * @details 기본 구현은 Arduino 환경에서 Serial.println(),
-         *          그 외 환경에서는 std::printf()를 사용합니다.
-         *          TCP, BLE, SD 카드 등 출력 대상을 변경하려면 이 함수를 재정의하세요.
-         *
-         * @param msg 출력할 최종 로그 메시지
-         */
+        /// @brief 플랫폼별 실제 출력을 담당하는 가상 함수
         virtual void outputLog(const cms::StringBase& msg);
     };
 
@@ -106,6 +93,8 @@ namespace cms {
     template <uint16_t MSG_SIZE = 256, uint8_t QUEUE_DEPTH = 16>
     class AsyncLogger : public LoggerBase {
     public:
+        using HandlerFunc = LoggerBase::HandlerFunc;
+
         static AsyncLogger& instance() {
             static AsyncLogger inst;
             return inst;
@@ -115,7 +104,7 @@ namespace cms {
         void pushToQueue(const cms::String<MSG_SIZE>& logMsg) { _queue.enqueue(logMsg); }
 
         /// @brief 큐에 쌓인 로그를 하나 꺼내어 출력합니다. (백그라운드 태스크에서 호출)
-        bool processNextLog();
+        bool update();
 
     protected:
         /// @brief 가공된 로그를 최종 목적지(큐 또는 핸들러)로 전달합니다.
@@ -130,3 +119,9 @@ namespace cms {
 
 // 템플릿 구현부 포함 (컴파일을 위해 헤더 하단에 위치)
 #include "cmsAsyncLogger.tpp"
+
+// ==================================================================================================
+// [Global Logger Instance]
+// logger.i(...)와 같이 편리하게 사용할 수 있도록 전역 참조 객체를 제공합니다.
+// ==================================================================================================
+inline cms::AsyncLogger<>& logger = cms::AsyncLogger<>::instance();

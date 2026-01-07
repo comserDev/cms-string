@@ -84,14 +84,14 @@ if (queue.pop(val)) {
 
 // 로거 인스턴스 획득 및 설정
 auto& logger = cms::AsyncLogger<>::instance();
-logger.begin(cms::LogLevel::Debug);
+logger.begin(cms::LogLevel::Debug, true);
 
 // 로그 출력 (자동 스타일링 및 태그 지원)
 logger.i("시스템 시작... [Network] 연결됨");
 logger.w("센서 데이터 불안정: %d", 404);
 
 // 백그라운드 루프에서 로그 처리
-while (logger.processNextLog());
+while (logger.update());
 ```
 
 ### 4. 리터럴 최적화
