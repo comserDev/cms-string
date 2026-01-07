@@ -1,13 +1,13 @@
 # cms-embedded-utils Examples
 
-이 문서는 `cms-embedded-utils` 라이브러리를 실무에서 극한까지 활용하는 다양한 시나리오별 예제 코드 모음입니다. 모든 예제는 **Zero-Heap(동적 할당 미사용)** 원칙을 준수하며, 임베디드 환경의 안정성과 성능을 최우선으로 합니다.
+이 문서는 `cms-embedded-utils` 라이브러리를 실무에서 극한까지 활용하는 다양한 시나리오별 예제 코드 모음입니다. 모든 예제는 **Zero-Heap(동적 할당 미사용)** 원칙을 준수합니다.
 
 ---
 
 ## 1. 문자열 조작 및 포맷팅 (String & Formatting)
 
 ### 1.1 복합 포맷팅 및 체이닝 (Chaining)
-`printf` 스타일과 C++ 스트림 스타일을 자유롭게 혼합하여 가독성 높은 코드를 작성할 수 있습니다.
+`printf` 스타일과 C++ 스트림 스타일을 자유롭게 혼합하여 사용할 수 있습니다.
 ```cpp
 #include <cmsString.h>
 
@@ -39,17 +39,6 @@ void processKorean() {
 }
 ```
 
-### 1.3 검색 및 대소문자 무시 비교
-```cpp
-void checkCommand(cms::String<64>& input) {
-    if (input.startsWith("GET", true)) { // 대소문자 무시
-        if (input.contains("status")) {
-            // 상태 보고 로직
-        }
-    }
-}
-```
-
 ---
 
 ## 2. 프로토콜 파싱 및 토큰화 (Parsing & Tokenize)
@@ -58,7 +47,6 @@ void checkCommand(cms::String<64>& input) {
 가장 깔끔하고 안전하게 문자열을 분리하여 고정 크기 배열에 담습니다.
 ```cpp
 void parseConfig(const char* line) {
-    auto& logger = cms::AsyncLogger<>::instance();
     cms::String<64> src = line; // 예: "SSID:MyHome:WPA2"
     cms::String<32> params[3];
 
@@ -222,6 +210,32 @@ protected:
 };
 ```
 
+### 4.4 표준 사용법 및 비동기 처리 (Standard Usage)
+가장 일반적인 로거 초기화 및 비동기 출력 처리 흐름입니다. `printf` 형식을 사용하여 동적 데이터를 포함할 수 있습니다.
+```cpp
+void standardLoggingExample() {
+    // 1. 로거 인스턴스 획득 및 설정
+    auto& myLog = cms::AsyncLogger<>::instance();
+    myLog.begin(cms::LogLevel::Debug);
+    myLog.setUseColor(true);
+
+    // 2. 다양한 레벨의 로그 출력 (printf 형식 지원)
+    myLog.d("디버그 메시지입니다. (Code: %d)", 101);
+    myLog.i("정보 메시지이며 [%s] 태그를 포함합니다.", "Network");
+    myLog.w("경고! [Sensor] 데이터가 불안정합니다. (현재값: %.2f)", 85.43f);
+    myLog.e("이 로그는 SECRET 정보를 포함하므로 무시됩니다.");
+    myLog.i("시스템 재시도 중... RETRY 명령 확인");
+
+    // 3. 비동기 로거의 핵심: 실제 출력 처리
+    // 로그는 즉시 출력되지 않고 내부 큐에 저장됩니다.
+    // 실제 출력은 CPU 여유가 있을 때(Idle task 등) 아래 함수를 호출하여 수행합니다.
+    std::cout << "\n[Processing Logs...]" << std::endl;
+    while (myLog.processNextLog()) {
+        // 큐가 빌 때까지 로그를 하나씩 꺼내 출력합니다.
+    }
+}
+```
+
 ---
 
 ## 5. 저수준 유틸리티 직접 사용 (`cms::string`)
@@ -265,6 +279,7 @@ cms::string::appendPrintf(myBuf, sizeof(myBuf), curLen, "ID:%d, VAL:%.2f", 10, 3
 ### 6.1 바이너리 패킷 덤프 도구
 ```cpp
 void dumpPacket(const uint8_t* data, size_t len) {
+    auto& logger = cms::AsyncLogger<>::instance();
     cms::String<128> hex;
     hex << "PKT [" << (int)len << " bytes]: ";
 
@@ -319,6 +334,7 @@ void showHistory() {
 
 ### 7.1 프로파일링을 통한 버퍼 크기 결정
 ```cpp
+auto& logger = cms::AsyncLogger<>::instance();
 cms::String<512> testStr;
 // ... 실제 로직 수행 ...
 logger.i("Peak usage: %.1f%%", testStr.peakUtilization());
