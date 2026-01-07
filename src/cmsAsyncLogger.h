@@ -179,7 +179,7 @@ namespace cms {
 
     private:
         /// 로그 메시지를 보관하는 스레드 안전 원형 큐
-        cms::ThreadSafeQueue<cms::String<MSG_SIZE>, QUEUE_DEPTH, uint8_t> _queue;
+        cms::ThreadSafeQueue<cms::String<MSG_SIZE>, QUEUE_DEPTH> _queue;
     };
 } // namespace cms
 
