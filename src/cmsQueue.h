@@ -29,7 +29,7 @@ namespace cms {
 /// @tparam T 저장할 데이터 타입
 /// @tparam N 큐의 최대 용량
 /// @tparam IndexType 인덱스 및 카운트용 타입 (기본값: size_t, 메모리 절약을 위해 uint8_t 등 사용 가능)
-template <typename T, uint8_t N, typename IndexType = uint8_t>
+template <typename T, uint16_t N, typename IndexType = uint16_t>
 class Queue {
 public:
     /// 큐의 상태를 초기화합니다.

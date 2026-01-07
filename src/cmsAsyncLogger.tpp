@@ -7,6 +7,7 @@
 
 namespace cms {
 
+    /// [update] 템플릿 클래스 전용 큐 펌프 구현
     template <uint16_t MSG_SIZE, uint8_t QUEUE_DEPTH>
     bool AsyncLogger<MSG_SIZE, QUEUE_DEPTH>::update() {
         cms::String<MSG_SIZE> msg;
@@ -17,6 +18,7 @@ namespace cms {
         return false;
     }
 
+    /// [vlog] 템플릿 크기에 최적화된 스택 버퍼 할당 및 가공 요청
     template <uint16_t MSG_SIZE, uint8_t QUEUE_DEPTH>
     void AsyncLogger<MSG_SIZE, QUEUE_DEPTH>::vlog(LogLevel level, const char* format, va_list args) {
         if (level < _runtimeLevel) return;
@@ -28,12 +30,14 @@ namespace cms {
         LoggerBase::logV(finalLog, rawBody, level, format, args);
     }
 
+    /// [dispatchLog] const char*를 템플릿 객체로 래핑하여 전달
     template <uint16_t MSG_SIZE, uint8_t QUEUE_DEPTH>
     void AsyncLogger<MSG_SIZE, QUEUE_DEPTH>::dispatchLog(const char* msg) {
         cms::String<MSG_SIZE> s = msg;
         dispatchLog(s);
     }
 
+    /// [dispatchLog] handleLog 필터링 후 최종 큐 저장 수행
     template <uint16_t MSG_SIZE, uint8_t QUEUE_DEPTH>
     void AsyncLogger<MSG_SIZE, QUEUE_DEPTH>::dispatchLog(const cms::String<MSG_SIZE>& logMsg) {
         if (!handleLog(logMsg)) {

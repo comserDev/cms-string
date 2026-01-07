@@ -27,15 +27,22 @@ namespace {
 
 namespace cms {
 
+    /// [begin] 로거 초기화 구현
     void LoggerBase::begin(LogLevel level, bool useColor) noexcept {
         _runtimeLevel = level;
         _useColor = useColor;
     }
+    /// [systemTimeSynced] 시간 동기화 플래그 설정 구현
     void LoggerBase::systemTimeSynced(bool synced) noexcept { _timeSynced = synced; }
+    /// [setRuntimeLevel] 런타임 필터 레벨 설정 구현
     void LoggerBase::setRuntimeLevel(LogLevel level) noexcept { _runtimeLevel = level; }
+    /// [setUseColor] 색상 모드 설정 구현
     void LoggerBase::setUseColor(bool useColor) noexcept { _useColor = useColor; }
+    /// [setLogLevel] 별칭 메서드 구현
     void LoggerBase::setLogLevel(LogLevel level) noexcept { _runtimeLevel = level; }
 
+    /// [d/i/w/e/log] 가변 인자 래퍼 함수들
+    /// 각 레벨에 맞는 vlog 가상 함수를 호출하여 실제 가공을 시작합니다.
     void LoggerBase::d(const char* format, ...) {
         va_list args; va_start(args, format); vlog(LogLevel::Debug, format, args); va_end(args);
     }
@@ -53,6 +60,12 @@ namespace cms {
         va_list args; va_start(args, format); vlog(level, format, args); va_end(args);
     }
 
+    /// [logV] 로그 메시지 조립 상세 구현
+    ///
+    /// 1) 타임스탬프 생성 (KST 또는 Uptime)
+    /// 2) 레벨 배지 및 색상 코드 추가
+    /// 3) 메시지 본문 포맷팅
+    /// 4) [태그] 및 키워드 스타일링 적용
     void LoggerBase::logV(cms::StringBase& out, cms::StringBase& tmp, LogLevel level, const char* format, va_list args) {
         if (level < _runtimeLevel || !format) return;
         out.clear();
@@ -84,6 +97,10 @@ namespace cms {
         dispatchLog(out.c_str());
     }
 
+    /// [applyStyling] 태그 스타일링 구현
+    ///
+    /// 대괄호로 감싸진 [TAG]를 찾아 DJB2 해시를 기반으로 고유 색상을 입힙니다.
+    /// 태그가 아닌 일반 텍스트는 키워드 강조 로직으로 전달합니다.
     void LoggerBase::applyStyling(cms::StringBase& out, const char* rawMsg, LogLevel level) {
         const char* p = rawMsg;
         const char* startBracket;
@@ -109,6 +126,10 @@ namespace cms {
         appendWithKeywords(out, p, strlen(p));
     }
 
+    /// [appendWithKeywords] 중요 키워드 강조 구현
+    ///
+    /// ERROR, FATAL 등 미리 정의된 키워드를 대소문자 구분 없이 찾아
+    /// Bold Red 스타일을 적용하여 시인성을 높입니다.
     void LoggerBase::appendWithKeywords(cms::StringBase& out, const char* src, size_t len) {
         if (len == 0) return;
         const char* p = src;
@@ -133,6 +154,7 @@ namespace cms {
         }
     }
 
+    /// [getLevelString] 레벨 약어 매핑 구현
     const char* LoggerBase::getLevelString(LogLevel level) noexcept {
         switch (level) {
             case LogLevel::Debug: return "D";
@@ -143,6 +165,7 @@ namespace cms {
         }
     }
 
+    /// [getColorCode] 레벨 색상 매핑 구현
     const char* LoggerBase::getColorCode(LogLevel level) noexcept {
         switch (level) {
             case LogLevel::Debug: return ANSI_COLOR_CYN;
@@ -153,6 +176,7 @@ namespace cms {
         }
     }
 
+    /// [outputLog] 기본 출력 장치 구현
     void LoggerBase::outputLog(const cms::StringBase& msg) {
 #ifdef ARDUINO
         Serial.println(msg.c_str());

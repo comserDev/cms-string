@@ -292,33 +292,60 @@ namespace cms {
     // [Helper Functions]
     // ==================================================================================================
 
-    /**
-     * @brief Token 배열의 내용을 String<N> 배열로 안전하게 복사합니다.
-     *
-     * @tparam N 대상 String의 버퍼 크기
-     * @tparam M 대상 배열의 크기
-     * @param tokens split 결과로 얻은 토큰 배열
-     * @param tokenCount 실제 분리된 토큰 개수
-     * @param dest 복사될 String<N> 배열
-     * @return 실제 복사된 개수
-     */
+    /// [copyTokens] Token 배열의 내용을 String<N> 배열로 안전하게 복사합니다.
+    ///
+    /// Why: Token은 원본 문자열을 참조만 하는 포인터 래퍼이므로, 원본이 사라지기 전에 독립적인 메모리(String 객체)로 데이터를 옮겨야 할 때 사용합니다.
+    /// How: 대상 배열의 크기(M)와 실제 토큰 개수 중 작은 값을 기준으로 순회하며, 각 String 객체의 append를 호출하여 데이터를 복사합니다.
+    ///
+    /// 사용 예:
+    /// @code
+    /// cms::string::Token tokens[3];
+    /// cms::String<32> results[3];
+    /// size_t n = copyTokens(tokens, 3, results);
+    /// @endcode
+    ///
+    /// @tparam N 대상 String의 버퍼 크기
+    /// @tparam M 대상 배열의 크기
+    /// @param tokens split 결과로 얻은 토큰 배열
+    /// @param tokenCount 실제 분리된 토큰 개수
+    /// @param dest 복사될 String<N> 배열
+    /// @return 실제 복사된 개수
     template<size_t N, size_t M>
     size_t copyTokens(const cms::string::Token* tokens, size_t tokenCount, String<N> (&dest)[M]) {
+        // 1) 경계 검사: 토큰 개수가 목적지 배열 크기를 넘지 않도록 제한
         size_t count = (tokenCount < M) ? tokenCount : M;
         for (size_t i = 0; i < count; ++i) {
+            // 2) 데이터 복사: 기존 내용을 비우고 토큰이 가리키는 영역을 복사
             dest[i].clear();
             dest[i].append(tokens[i].ptr, tokens[i].len);
         }
         return count;
     }
 
-    /**
-     * @brief 문자열을 분리하여 즉시 String<N> 배열로 복사합니다. (비파괴적)
-     */
+    /// [splitTo] 문자열을 분리하여 즉시 String<N> 배열로 복사합니다.
+    ///
+    /// Why: 분리와 복사라는 두 단계를 하나로 합쳐 사용자 코드의 가독성을 높이고 실수를 방지하기 위함입니다.
+    /// How: 내부적으로 임시 Token 배열을 스택에 생성하여 비파괴적 split을 수행한 뒤, copyTokens를 통해 최종 배열로 데이터를 옮깁니다.
+    ///
+    /// 사용 예:
+    /// @code
+    /// cms::String<32> params[3];
+    /// size_t count = splitTo(src, ':', params);
+    /// @endcode
+    ///
+    /// @tparam N 결과 String의 버퍼 크기
+    /// @tparam M 결과 배열의 크기
+    /// @param src 원본 문자열 객체
+    /// @param delimiter 분리 기준 문자
+    /// @param dest 결과를 저장할 String<N> 배열
+    /// @return 실제 분리 및 복사된 토큰 개수
     template<size_t N, size_t M>
     size_t splitTo(const StringBase& src, char delimiter, String<N> (&dest)[M]) {
+        // 1) 임시 토큰 배열 생성 (스택 할당)
         cms::string::Token tokens[M];
+        // 2) 비파괴적 분할 수행
         size_t count = src.split(delimiter, tokens, M);
+        // 3) 결과를 String 객체 배열로 변환하여 반환
         return copyTokens(tokens, count, dest);
     }
 }

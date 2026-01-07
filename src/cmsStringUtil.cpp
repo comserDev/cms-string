@@ -19,6 +19,12 @@
 
 #include "cmsStringUtil.h"   // cms::string 선언
 
+// ==================================================================================================
+// [cms::string] 개요
+// - 왜 존재하는가: 임베디드 환경에서 힙 메모리 할당 없이 문자열을 안전하고 효율적으로 처리하기 위한 저수준 유틸리티 모음입니다.
+// - 어떻게 동작하는가: 원시 C 문자열(char*)을 직접 조작하며, UTF-8 인코딩을 인식하여 멀티바이트 문자가 깨지지 않도록 보장합니다.
+// ==================================================================================================
+
 namespace {
     // 소수점 처리를 위한 10의 거듭제곱 테이블 (최대 9자리)
     static const double powersOf10[] = {
@@ -30,10 +36,17 @@ namespace {
         0.5, 0.05, 0.005, 0.0005, 0.00005, 0.000005, 0.0000005, 0.00000005, 0.000000005, 0.0000000005
     };
 
-    // --------------------------------------------------------------------------------------------------
-    // [appendUIntInternal] 부호 없는 정수를 문자열로 변환하여 추가합니다.
-    // --------------------------------------------------------------------------------------------------
-    // Usage: appendUIntInternal(...);
+    /// [appendUIntInternal] 부호 없는 정수를 문자열로 변환하여 추가
+    ///
+    /// printf의 무거운 로직 없이 정수를 텍스트로 고속 직렬화하기 위해 사용합니다.
+    /// 2글자 단위 룩업 테이블을 사용하여 나눗셈 연산을 절반으로 줄이고 성능을 최적화합니다.
+    ///
+    /// @param buffer 결과 저장 버퍼
+    /// @param maxLen 버퍼 최대 크기
+    /// @param curLen [IN/OUT] 현재 길이
+    /// @param uval 변환할 값
+    /// @param width 최소 출력 너비
+    /// @param padChar 채움 문자
     void appendUIntInternal(char* buffer, size_t maxLen, size_t& curLen, unsigned long uval, int width, char padChar) {
         // 1. 숫자 자릿수 계산 (분기 예측 최적화)
         int digitsCount;
@@ -89,7 +102,12 @@ namespace {
         }
         }
 
-        // [최적화] KMP 알고리즘을 위한 부분 일치 테이블(LPS) 생성 함수
+        /// [computeLPS] KMP 알고리즘용 부분 일치 테이블(LPS) 생성
+        ///
+        /// 대소문자 무시 검색 시 반복적인 비교를 피하기 위해 패턴의 접두사와 접미사 일치 정보를 계산합니다.
+        /// @param pat 검색 패턴
+        /// @param m 패턴 길이
+        /// @param lps [OUT] 계산된 테이블 저장 배열
         void computeLPS(const char* pat, size_t m, int16_t* lps) {
             size_t len = 0;
             lps[0] = 0;
@@ -110,9 +128,11 @@ namespace {
             }
     }
 
-    // --------------------------------------------------------------------------------------------------
-    // [appendHexInternal] 부호 없는 정수를 16진수 문자열로 변환하여 추가합니다.
-    // --------------------------------------------------------------------------------------------------
+    /// [appendHexInternal] 부호 없는 정수를 16진수 문자열로 변환
+    ///
+    /// 메모리 주소나 바이너리 데이터를 사람이 읽기 쉬운 16진수 형태로 표현하기 위해 사용합니다.
+    /// 비트 시프트(>> 4)와 마스킹(& 0xF)을 사용하여 나눗셈 없이 고속으로 변환합니다.
+    /// @param uppercase true: 대문자(ABC), false: 소문자(abc)
     void appendHexInternal(char* buffer, size_t maxLen, size_t& curLen, unsigned long uval, int width, char padChar, bool uppercase) {
         // 1. 16진수 자릿수 계산 (비트 연산 활용)
         int digitsCount = 0;
@@ -147,16 +167,14 @@ namespace {
         }
     }
 
-    // --------------------------------------------------------------------------------------------------
-    // [findUtf8CharStart] UTF-8 문자열에서 논리적 글자 인덱스에 해당하는 물리적 주소를 찾습니다.
-    // 바이트 비트 패턴을 분석하여 멀티바이트 문자의 시작점을 정확히 판별합니다.
-    //
-    // Usage: findUtf8CharStart(...);
-    //
-    // @param str 검색할 UTF-8 문자열
-    // @param charIdx 찾고자 하는 글자의 논리적 위치 (0부터 시작)
-    // @return 해당 글자가 시작되는 메모리 주소 (범위 초과 시 문자열 끝 주소)
-    // --------------------------------------------------------------------------------------------------
+    /// [findUtf8CharStart] UTF-8 논리적 인덱스의 물리적 주소 탐색
+    ///
+    /// 멀티바이트 환경에서 'n번째 글자'가 실제 메모리의 어디에 위치하는지 정확히 찾기 위해 필요합니다.
+    /// UTF-8의 후속 바이트 비트 패턴(10xxxxxx)을 건너뛰며 논리적 글자 수를 카운트합니다.
+    ///
+    /// @param str 검색할 UTF-8 문자열
+    /// @param charIdx 찾고자 하는 글자의 논리적 위치 (0부터 시작)
+    /// @return 해당 글자가 시작되는 메모리 주소
     const char* findUtf8CharStart(const char* str, size_t charIdx) {
         // 1. 입력 문자열이 유효하지 않으면 즉시 종료합니다.
         if (!str) return nullptr;
@@ -179,7 +197,11 @@ namespace {
 
 namespace cms {
     namespace string {
-        // 표준 strlcpy가 없는 환경을 대비한 자체 구현 (BSD 스타일)
+        /// [strlcpy] 안전한 문자열 복사 (BSD 스타일)
+        ///
+        /// 표준 strcpy의 버퍼 오버플로우 위험을 방지하기 위해 항상 NUL 종료를 보장하며 복사합니다.
+        /// @param dsize 대상 버퍼의 전체 크기
+        /// @return 복사를 시도한 원본 문자열의 전체 길이
         size_t strlcpy(char *dst, const char *src, size_t dsize) {
             const char *osrc = src;
             size_t nleft = dsize;
@@ -201,7 +223,11 @@ namespace cms {
 
             return (src - osrc - 1); // 복사하려고 시도했던 원본 길이 반환
         }
-        // [최적화] strcasestr을 대체하는 경량 대소문자 무시 검색 함수
+
+        /// [strcasestr] 대소문자 무시 부분 문자열 검색
+        ///
+        /// Why: 표준 라이브러리에 없는 경우가 많고, 임베디드에서 대소문자 구분 없는 명령 파싱에 필수적입니다.
+        /// How: 패턴이 짧을 경우 KMP 알고리즘을 사용하여 O(n+m) 성능을 보장하며, 길면 Naive 방식으로 전환합니다.
         const char* strcasestr(const char* haystack, const char* needle) {
             if (!*needle) return haystack;
             size_t m = strlen(needle);
@@ -257,16 +283,13 @@ namespace cms {
             return cms::string::toFloat(ptr, len);
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [trim] 문자열 양 끝의 공백 및 제어 문자(\r, \n, \t)를 제거합니다.
-        // 후방 공백은 널 문자로 자르고, 전방 공백은 memmove를 통해 데이터를 앞으로 당겨 제자리에서 수정합니다.
-        //
-        // --------------------------------------------------------------------------------------------------
-        // Usage: trim(...);
-        //
-        // @param str 수정할 대상 문자열 (Null-terminated)
-        // @note 원본 문자열이 직접 수정되므로 데이터 보존이 필요하면 복사본을 사용하세요.
-        // --------------------------------------------------------------------------------------------------
+        /// [trim] 문자열 양 끝의 공백 및 제어 문자 제거
+        ///
+        /// 데이터 정규화를 위해 불필요한 여백을 제거합니다.
+        /// 후방 공백은 NUL 문자로 즉시 자르고, 전방 공백은 memmove를 사용하여 데이터를 앞으로 당깁니다.
+        ///
+        /// @param str 수정할 대상 문자열 (In-place 수정)
+        /// @return 수정 후의 문자열 바이트 길이
         size_t trim(char* str) {
             if (!str || *str == '\0') return 0;
 
@@ -297,17 +320,12 @@ namespace cms {
             return newLen;
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [startsWith] 문자열이 특정 접두사(prefix)로 시작하는지 확인합니다.
-        // 접두사 길이만큼 메모리를 비교하며, 대소문자 무시 옵션을 지원합니다.
-        //
-        // Usage: startsWith(...);
-        //
-        // @param str 검사할 전체 문자열
-        // @param prefix 찾고자 하는 접두사
-        // @param ignoreCase true일 경우 대소문자를 구분하지 않고 비교합니다.
-        // @return true: 접두사 일치, false: 불일치 또는 입력값 오류
-        // --------------------------------------------------------------------------------------------------
+        /// [startsWith] 접두사 일치 여부 확인
+        ///
+        /// 프로토콜 헤더나 특정 명령어로 시작하는지 빠르게 판별하기 위해 사용합니다.
+        /// @param str 검사 대상
+        /// @param prefix 찾을 접두사
+        /// @param ignoreCase true일 경우 대소문자 무시
         bool startsWith(const char* str, const char* prefix, bool ignoreCase) {
             if (!str || !prefix) return false;
             return startsWith(str, prefix, strlen(prefix), ignoreCase);
@@ -326,17 +344,12 @@ namespace cms {
             return true;
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [equals] 두 문자열의 내용이 완전히 일치하는지 비교합니다.
-        // 포인터 주소 비교를 우선 수행하여 동일 객체일 경우 즉시 참을 반환하여 성능을 최적화합니다.
-        //
-        // Usage: equals(...);
-        //
-        // @param s1 비교 대상 문자열 1
-        // @param s2 비교 대상 문자열 2
-        // @param ignoreCase true일 경우 대소문자를 무시하고 비교합니다.
-        // @return true: 내용 일치, false: 불일치
-        // --------------------------------------------------------------------------------------------------
+        /// [equals] 두 문자열의 내용 일치 여부 비교
+        ///
+        /// Why: 단순 strcmp보다 안전하고, 동일 포인터 체크 및 길이 사전 비교를 통해 성능을 최적화합니다.
+        /// @param s1 비교 대상 1
+        /// @param s2 비교 대상 2
+        /// @param ignoreCase true일 경우 대소문자 무시
         bool equals(const char* s1, const char* s2, bool ignoreCase) {
             if (s1 == s2) return true;
             if (!s1 || !s2) return false;
@@ -360,9 +373,7 @@ namespace cms {
             return true;
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [compare] 두 문자열을 사전식으로 비교합니다. (UTF-8 안전)
-        // --------------------------------------------------------------------------------------------------
+        /// [compare] 두 문자열의 사전식 비교 (UTF-8 안전)
         int compare(const char* s1, size_t s1Len, const char* s2, size_t s2Len) {
             if (s1 == s2) return 0;
             if (!s1) return -1;
@@ -377,9 +388,7 @@ namespace cms {
             return 0;
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [compareIgnoreCase] 대소문자를 무시하고 두 문자열을 사전식으로 비교합니다.
-        // --------------------------------------------------------------------------------------------------
+        /// [compareIgnoreCase] 대소문자 무시 사전식 비교
         int compareIgnoreCase(const char* s1, size_t s1Len, const char* s2, size_t s2Len) {
             if (s1 == s2) return 0;
             if (!s1) return -1;
@@ -406,17 +415,12 @@ namespace cms {
             return 0;
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [indexOf] 문자열 내에서 특정 문자가 처음 나타나는 위치의 주소를 찾습니다.
-        // 표준 strchr을 기반으로 하며, 대소문자 무시 시 루프를 통해 소문자 변환 비교를 수행합니다.
-        //
-        // Usage: indexOf(...);
-        //
-        // @param str 검색 대상 문자열
-        // @param c 찾을 문자 (ASCII 범위 권장)
-        // @param ignoreCase true일 경우 대소문자를 구분하지 않습니다.
-        // @return 문자가 발견된 위치의 포인터 (찾지 못하면 nullptr)
-        // --------------------------------------------------------------------------------------------------
+        /// [indexOf] 특정 문자의 첫 출현 위치 탐색
+        ///
+        /// 구분자나 특정 기호의 위치를 찾기 위해 사용합니다.
+        /// @param str 검색 대상
+        /// @param c 찾을 문자
+        /// @param ignoreCase true일 경우 대소문자 무시
         const char* indexOf(const char* str, char c, bool ignoreCase) {
             if (!str) return nullptr;
 
@@ -439,15 +443,11 @@ namespace cms {
             return strchr(str, c);
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [toInt] 숫자로 구성된 문자열을 정수(int)로 변환합니다.
-        // strtol을 사용하여 10진수 기반으로 안전하게 변환하며, 오버플로우 시 long 범위를 따릅니다.
-        //
-        // Usage: toInt(...);
-        //
-        // @param str 변환할 문자열 (예: "123")
-        // @return 변환된 정수값 (실패 시 0)
-        // --------------------------------------------------------------------------------------------------
+        /// [toInt] 문자열을 정수(int)로 변환
+        ///
+        /// 텍스트 기반 데이터를 숫자 변수로 변환할 때 사용합니다.
+        /// 공백 스킵, 부호 처리, 숫자 파싱 단계를 거치며 오버플로우를 방지합니다.
+        /// @param str 변환할 문자열
         int toInt(const char* str) {
             if (!str || *str == '\0') return 0;
             return toInt(str, strlen(str));
@@ -478,9 +478,7 @@ namespace cms {
             return static_cast<int>(val * sign);
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [isDigit] 문자열이 유효한 10진수 정수 형식인지 검사합니다.
-        // --------------------------------------------------------------------------------------------------
+        /// [isDigit] 유효한 10진수 정수 형식 여부 확인
         bool isDigit(const char* str) {
             if (!str || *str == '\0') return false;
             return isDigit(str, strlen(str));
@@ -509,9 +507,7 @@ namespace cms {
             return (i == len && digitCount > 0);
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [hexToInt] 16진수 문자열을 정수로 변환합니다.
-        // --------------------------------------------------------------------------------------------------
+        /// [hexToInt] 16진수 문자열을 정수로 변환
         int hexToInt(const char* str) {
             if (!str || *str == '\0') return 0;
             return hexToInt(str, strlen(str));
@@ -542,9 +538,7 @@ namespace cms {
             return static_cast<int>(val);
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [isHex] 문자열이 유효한 16진수 형식인지 검사합니다.
-        // --------------------------------------------------------------------------------------------------
+        /// [isHex] 유효한 16진수 형식 여부 확인
         bool isHex(const char* str) {
             if (!str || *str == '\0') return false;
             return isHex(str, strlen(str));
@@ -575,9 +569,7 @@ namespace cms {
             return (i == len && digitCount > 0);
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [toFloat] 문자열을 실수로 변환합니다.
-        // --------------------------------------------------------------------------------------------------
+        /// [toFloat] 문자열을 실수(double)로 변환
         double toFloat(const char* str) {
             if (!str || *str == '\0') return 0.0;
             return toFloat(str, strlen(str));
@@ -620,9 +612,7 @@ namespace cms {
             return val * sign;
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [isNumeric] 문자열이 유효한 실수 형식인지 검사합니다.
-        // --------------------------------------------------------------------------------------------------
+        /// [isNumeric] 유효한 실수 형식 여부 확인
         bool isNumeric(const char* str) {
             if (!str || *str == '\0') return false;
             return isNumeric(str, strlen(str));
@@ -661,15 +651,11 @@ namespace cms {
             return (i == len && digitCount > 0);
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [utf8_strlen] UTF-8 인코딩을 인식하여 문자열의 실제 글자 수를 측정합니다.
-        // 멀티바이트 문자의 후속 바이트를 제외하고 시작 바이트만 카운트하여 논리적 길이를 도출합니다.
-        //
-        // Usage: utf8_strlen(...);
-        //
-        // @param str 측정할 UTF-8 문자열
-        // @return 논리적 글자 수 (바이트 크기가 아님)
-        // --------------------------------------------------------------------------------------------------
+        /// [utf8_strlen] UTF-8 논리적 글자 수 측정
+        ///
+        /// 바이트 크기가 아닌 실제 화면에 표시되는 글자 수를 계산합니다.
+        /// ASCII 영역은 고속 스킵하고, 멀티바이트 영역은 비트 패턴을 분석합니다.
+        /// @param str 측정할 UTF-8 문자열
         size_t utf8_strlen(const char* str) {
             if (!str) return 0;
 
@@ -688,17 +674,13 @@ namespace cms {
             return count;
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [utf8SafeEnd] UTF-8 문자열을 자를 때 글자 중간이 잘리지 않는 안전한 바이트 위치를 계산합니다.
-        // 지정된 범위 끝에서 역방향으로 스캔하여 유효한 글자의 시작점을 찾습니다.
-        //
-        // Usage: size_t end = cms::string::utf8SafeEnd(str, 0, 10);
-        //
-        // @param str 원본 UTF-8 문자열
-        // @param startByte 검색을 시작할 바이트 오프셋
-        // @param maxBytes 허용되는 최대 바이트 길이
-        // @return 잘리지 않는 안전한 종료 바이트 위치
-        // --------------------------------------------------------------------------------------------------
+        /// [utf8SafeEnd] 안전한 UTF-8 종료 지점 계산
+        ///
+        /// 문자열을 자를 때 한글 등 멀티바이트 문자의 중간이 잘려 인코딩이 깨지는 것을 방지합니다.
+        /// 지정된 범위 끝에서 역방향으로 스캔하여 유효한 글자의 시작 경계를 찾습니다.
+        /// @param startByte 시작 바이트 위치
+        /// @param maxBytes 허용할 최대 바이트 수
+        /// @return 잘리지 않는 안전한 종료 바이트 오프셋
         size_t utf8SafeEnd(const char* str, size_t startByte, size_t maxBytes) {
             if (!str || maxBytes == 0) return startByte;
 
@@ -715,18 +697,13 @@ namespace cms {
             return end;
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [find] 문자열 내에서 특정 대상(target)이 시작되는 논리적 글자 위치를 찾습니다.
-        // 물리적 주소를 먼저 찾은 후, 시작점부터 해당 주소까지의 UTF-8 글자 수를 역산합니다.
-        //
-        // Usage: find(...);
-        //
-        // @param str 검색 대상 문자열
-        // @param target 찾고자 하는 부분 문자열
-        // @param startChar 검색을 시작할 글자 인덱스 (기본값: 0)
-        // @param ignoreCase true일 경우 대소문자 무시
-        // @return 0부터 시작하는 글자 단위 인덱스 (찾지 못하면 -1)
-        // --------------------------------------------------------------------------------------------------
+        /// [find] 부분 문자열의 논리적 위치 탐색
+        ///
+        /// UTF-8 환경에서 특정 단어가 몇 번째 '글자'에서 시작하는지 찾습니다.
+        /// 물리적 주소를 먼저 찾은 후, 시작점부터 해당 주소까지의 글자 수를 역산합니다.
+        /// @param target 찾을 문자열
+        /// @param startChar 검색 시작 글자 위치
+        /// @param ignoreCase true일 경우 대소문자 무시
         int find(const char* str, const char* target, size_t startChar, bool ignoreCase) {
             if (!str || !target) return -1;
             return find(str, strlen(str), target, strlen(target), startChar, ignoreCase);
@@ -751,17 +728,12 @@ namespace cms {
             return static_cast<int>(startChar + charOffset);
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [lastIndexOf] 문자열의 끝에서부터 역순으로 특정 단어를 검색하여 글자 위치를 반환합니다.
-        // 전체 문자열을 순방향으로 반복 스캔하여 가장 마지막에 발견된 위치를 확정합니다.
-        //
-        // Usage: lastIndexOf(...);
-        //
-        // @param str 검색 대상 문자열
-        // @param target 찾고자 하는 부분 문자열
-        // @param ignoreCase true일 경우 대소문자 무시
-        // @return 마지막으로 발견된 글자 단위 인덱스 (찾지 못하면 -1)
-        // --------------------------------------------------------------------------------------------------
+        /// [lastIndexOf] 부분 문자열의 마지막 논리적 위치 탐색
+        ///
+        /// 파일 확장자나 경로 구분자 등 마지막에 나타나는 패턴을 찾을 때 유용합니다.
+        /// 전체 문자열을 순방향으로 반복 스캔하여 가장 마지막 발견 지점을 확정합니다.
+        /// @param target 찾을 문자열
+        /// @param ignoreCase true일 경우 대소문자 무시
         int lastIndexOf(const char* str, const char* target, bool ignoreCase) {
             if (!str || !target) return -1;
             return lastIndexOf(str, strlen(str), target, strlen(target), ignoreCase);
@@ -790,17 +762,13 @@ namespace cms {
             return static_cast<int>(charIdx);
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [insert] 기존 문자열의 특정 글자 위치에 새로운 문자열을 끼워 넣습니다.
-        // memmove를 사용하여 삽입 지점 이후의 데이터를 뒤로 밀어내며, 버퍼 크기를 초과하면 잘릴 수 있습니다.
-        //
-        // Usage: insert(...);
-        //
-        // @param buffer 대상 버퍼
-        // @param maxLen 버퍼의 물리적 최대 크기 (널 종료 문자 포함)
-        // @param charIdx 삽입할 논리적 글자 위치
-        // @param src 삽입할 문자열
-        // --------------------------------------------------------------------------------------------------
+        /// [insert] 특정 글자 위치에 문자열 삽입
+        ///
+        /// 기존 데이터를 보존하면서 중간에 새로운 텍스트를 끼워 넣습니다.
+        /// memmove를 사용하여 삽입 지점 이후의 데이터를 뒤로 밀어내며 제자리에서 수정합니다.
+        /// @param charIdx 삽입할 논리적 글자 위치
+        /// @param src 삽입할 문자열
+        /// @return 삽입 후의 새로운 문자열 바이트 길이
         size_t insert(char* buffer, size_t maxLen, size_t curLen, size_t charIdx, const char* src) {
             if (!buffer || !src || *src == '\0') return curLen;
 
@@ -828,16 +796,13 @@ namespace cms {
             return curLen + srcLen;
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [remove] 문자열의 특정 구간을 삭제하고 뒤쪽 데이터를 앞으로 당깁니다.
-        // 삭제할 글자 수만큼의 영역을 memmove로 덮어씌워 제자리에서 수정합니다.
-        //
-        // Usage: remove(...);
-        //
-        // @param buffer 대상 버퍼
-        // @param charIdx 삭제를 시작할 글자 위치
-        // @param charCount 삭제할 글자 수
-        // --------------------------------------------------------------------------------------------------
+        /// [remove] 문자열의 특정 구간 삭제
+        ///
+        /// 지정된 글자 범위의 데이터를 제거하고 뒤쪽 데이터를 앞으로 당깁니다.
+        /// memmove를 사용하여 삭제 구간을 덮어씌우는 방식으로 동작합니다.
+        /// @param charIdx 삭제 시작 글자 위치
+        /// @param charCount 삭제할 글자 수
+        /// @return 삭제 후의 새로운 문자열 바이트 길이
         size_t remove(char* buffer, size_t curLen, size_t charIdx, size_t charCount) {
             if (!buffer) return 0;
 
@@ -855,18 +820,14 @@ namespace cms {
             return curLen - (endOffset - startOffset);
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [substring] 원본 문자열에서 지정된 글자 범위를 추출하여 대상 버퍼에 복사합니다.
-        // UTF-8 경계를 인식하여 시작/종료 주소를 계산하므로 한글 중간이 잘리는 현상을 방지합니다.
-        //
-        // Usage: substring(...);
-        //
-        // @param src 원본 문자열
-        // @param dest 결과를 저장할 버퍼
-        // @param destLen 결과 버퍼의 최대 크기
-        // @param left 시작 글자 인덱스
-        // @param right 종료 글자 인덱스 (0일 경우 끝까지 추출)
-        // --------------------------------------------------------------------------------------------------
+        /// [substring] 논리적 글자 범위 추출
+        ///
+        /// UTF-8 경계를 인식하여 시작/종료 주소를 계산하므로 한글 중간이 잘리는 현상을 방지합니다.
+        /// @param src 원본 문자열
+        /// @param dest 결과를 저장할 버퍼
+        /// @param destLen 결과 버퍼의 최대 크기
+        /// @param left 시작 글자 인덱스
+        /// @param right 종료 글자 인덱스 (0일 경우 끝까지)
         size_t substring(const char* src, char* dest, size_t destLen, size_t left, size_t right) {
             if (!src || !dest || destLen == 0) return 0;
             dest[0] = '\0';
@@ -894,18 +855,14 @@ namespace cms {
             return byteLen;
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [byteSubstring] 논리적 글자가 아닌 물리적 바이트 오프셋을 기준으로 문자열을 자릅니다.
-        // 고정 크기 프로토콜 패킷이나 바이너리 데이터가 섞인 문자열을 처리할 때 유용합니다.
-        //
-        // Usage: byteSubstring(...);
-        //
-        // @param src 원본 문자열
-        // @param dest 결과를 저장할 버퍼
-        // @param destLen 결과 버퍼의 최대 크기
-        // @param startByte 시작 바이트 오프셋
-        // @param endByte 종료 바이트 오프셋 (0일 경우 끝까지)
-        // --------------------------------------------------------------------------------------------------
+        /// [byteSubstring] 물리적 바이트 오프셋 기준 추출
+        ///
+        /// 고정 크기 프로토콜 패킷이나 바이너리 데이터가 섞인 문자열을 처리할 때 유용합니다.
+        /// @param src 원본 문자열
+        /// @param dest 결과를 저장할 버퍼
+        /// @param destLen 결과 버퍼의 최대 크기
+        /// @param startByte 시작 바이트 오프셋
+        /// @param endByte 종료 바이트 오프셋 (0일 경우 끝까지)
         size_t byteSubstring(const char* src, char* dest, size_t destLen, size_t startByte, size_t endByte) {
             if (!src || !dest || destLen == 0) return 0;
             dest[0] = '\0';
@@ -926,18 +883,14 @@ namespace cms {
             return copyLen;
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [split] 구분자(delimiter)를 기준으로 문자열을 여러 조각으로 분리합니다.
-        // 원본 문자열의 구분자 위치에 '\0'을 삽입하여 논리적으로 분리하는 파괴적(Destructive) 방식입니다.
-        //
-        // Usage: split(...);
-        //
-        // @param str 분리할 원본 문자열 (함수 실행 후 수정됨)
-        // @param delimiter 구분 문자 (예: ':')
-        // @param tokens 분리된 문자열 포인터들을 저장할 배열
-        // @param maxTokens 최대 분리 가능 개수
-        // @return 실제 분리된 토큰의 개수
-        // --------------------------------------------------------------------------------------------------
+        /// [split] 구분자 기준 문자열 분리 (파괴적)
+        ///
+        /// 원본 문자열의 구분자 위치에 '\0'을 삽입하여 논리적으로 분리합니다.
+        /// 추가적인 메모리 할당 없이 포인터 배열만으로 파싱을 수행하여 매우 빠릅니다.
+        /// @param str 분리할 원본 (함수 실행 후 수정됨)
+        /// @param delimiter 구분 문자 (예: ':')
+        /// @param tokens 분리된 포인터들을 저장할 배열
+        /// @param maxTokens 최대 분리 가능 개수
         size_t split(char* str, char delimiter, char** tokens, size_t maxTokens) {
             // 1. 방어적 프로그래밍: 입력 포인터나 토큰 배열이 유효하지 않으면 0을 반환합니다.
             if (!str || !tokens || maxTokens == 0) return 0;
@@ -967,9 +920,13 @@ namespace cms {
             return count;
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [split] 비파괴적 분할 구현부
-        // --------------------------------------------------------------------------------------------------
+        /// [split] 구분자 기준 문자열 분리 (비파괴적)
+        ///
+        /// 원본을 수정하지 않고 Token 구조체(포인터+길이) 배열을 생성합니다.
+        /// 원본 데이터를 보존해야 하거나 읽기 전용 메모리(Flash)에 있는 문자열을 파싱할 때 사용합니다.
+        /// @param str 분리할 원본 (수정되지 않음)
+        /// @param tokens 분리된 Token 구조체 배열
+        /// @param maxTokens 최대 분리 가능 개수
         size_t split(const char* str, char delimiter, Token* tokens, size_t maxTokens) {
             if (!str || !tokens || maxTokens == 0) return 0;
 
@@ -997,18 +954,14 @@ namespace cms {
             return ++count;
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [append] 길이를 이미 알고 있는 데이터를 버퍼 끝에 고속으로 추가합니다.
-        // strlen 호출 오버헤드를 제거하기 위해 memcpy를 사용하며, curLen을 참조로 받아 즉시 업데이트합니다.
-        //
-        // Usage: append(...);
-        //
-        // @param buffer 대상 버퍼
-        // @param maxLen 버퍼 최대 크기
-        // @param curLen 현재 문자열 길이 (함수 실행 후 증가된 길이로 업데이트됨)
-        // @param src 추가할 데이터 소스
-        // @param srcLen 추가할 데이터의 바이트 길이
-        // --------------------------------------------------------------------------------------------------
+        /// [append] 고속 데이터 추가
+        ///
+        /// 길이를 이미 알고 있는 데이터를 버퍼 끝에 덧붙입니다.
+        /// strlen 호출 오버헤드를 제거하기 위해 memcpy를 사용하며, curLen을 즉시 업데이트합니다.
+        /// @param buffer 대상 버퍼
+        /// @param curLen [IN/OUT] 현재 길이
+        /// @param src 추가할 데이터 소스
+        /// @param srcLen 추가할 데이터의 바이트 길이
         void append(char* __restrict buffer, size_t maxLen, size_t& curLen, const char* __restrict src, size_t srcLen) noexcept {
             if (!buffer || !src || srcLen == 0 || curLen >= maxLen - 1) return;
 
@@ -1022,19 +975,14 @@ namespace cms {
             }
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [appendInt] 정수값을 문자열로 변환하여 버퍼 끝에 추가합니다.
-        // 숫자를 역순으로 추출한 뒤 해당 구간을 뒤집어 정렬하며, 자릿수 맞춤(Padding) 기능을 지원합니다.
-        //
-        // Usage: appendInt(...);
-        //
-        // @param buffer 대상 버퍼
-        // @param maxLen 버퍼 최대 크기
-        // @param curLen 현재 길이 (업데이트됨)
-        // @param val 변환할 정수값 (long 타입)
-        // @param width 최소 출력 너비 (0일 경우 가변 길이)
-        // @param padChar 채움 문자 (예: '0', ' ')
-        // --------------------------------------------------------------------------------------------------
+        /// [appendInt] 정수값을 문자열로 변환하여 추가
+        ///
+        /// 숫자를 텍스트로 변환하여 버퍼 끝에 덧붙입니다. 자릿수 맞춤(Padding) 기능을 지원합니다.
+        /// @param buffer 대상 버퍼
+        /// @param curLen [IN/OUT] 현재 길이
+        /// @param val 변환할 정수값
+        /// @param width 최소 출력 너비
+        /// @param padChar 채움 문자 (예: '0', ' ')
         void appendInt(char* buffer, size_t maxLen, size_t& curLen, long val, int width, char padChar) {
             // 1. 방어적 코드: 버퍼가 이미 가득 찼다면 중단합니다.
             if (curLen >= maxLen - 1) return;
@@ -1049,18 +997,13 @@ namespace cms {
             }
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [appendFloat] 실수값을 문자열로 변환하여 버퍼 끝에 추가합니다.
-        // 반올림 보정을 수행한 후 정수부와 소수부를 분리하여 순차적으로 결합합니다.
-        //
-        // Usage: appendFloat(...);
-        //
-        // @param buffer 대상 버퍼
-        // @param maxLen 버퍼 최대 크기
-        // @param curLen 현재 길이 (업데이트됨)
-        // @param val 변환할 실수값 (float 타입)
-        // @param decimalPlaces 소수점 이하 출력 자리수
-        // --------------------------------------------------------------------------------------------------
+        /// [appendFloat] 실수값을 문자열로 변환하여 추가
+        ///
+        /// 반올림 보정을 수행한 후 정수부와 소수부를 분리하여 순차적으로 결합합니다.
+        /// @param buffer 대상 버퍼
+        /// @param curLen [IN/OUT] 현재 길이
+        /// @param val 변환할 실수값
+        /// @param decimalPlaces 소수점 이하 출력 자리수
         void appendFloat(char* buffer, size_t maxLen, size_t& curLen, double val, int decimalPlaces) {
             if (curLen >= maxLen - 1) return;
             if (decimalPlaces < 0) decimalPlaces = 0;
@@ -1096,17 +1039,12 @@ namespace cms {
             }
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [contains] 문자열 내에 특정 부분 문자열이 포함되어 있는지 확인합니다.
-        // strstr 또는 strcasestr을 사용하여 부분 일치 여부를 검사합니다.
-        //
-        // Usage: contains(...);
-        //
-        // @param str 검사 대상 문자열
-        // @param target 찾을 문자열
-        // @param ignoreCase true일 경우 대소문자 무시
-        // @return true: 포함됨, false: 미포함
-        // --------------------------------------------------------------------------------------------------
+        /// [contains] 부분 문자열 포함 여부 확인
+        ///
+        /// 특정 단어나 패턴이 문자열 내에 존재하는지 검사합니다.
+        /// @param str 검사 대상
+        /// @param target 찾을 문자열
+        /// @param ignoreCase true일 경우 대소문자 무시
         bool contains(const char* str, const char* target, bool ignoreCase) {
             if (!str || !target) return false;
             return contains(str, strlen(str), target, strlen(target), ignoreCase);
@@ -1119,15 +1057,10 @@ namespace cms {
             return (ignoreCase ? cms::string::strcasestr(str, target) : strstr(str, target)) != nullptr;
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [toUpperCase] 문자열의 모든 영문 소문자를 대문자로 변환합니다.
-        // ASCII 범위(0~127) 내의 문자만 처리하여 멀티바이트(한글 등) 인코딩 깨짐을 방지합니다.
-        //
-        // --------------------------------------------------------------------------------------------------
-        // Usage: toUpperCase(...);
-        //
-        // @param str 변환할 대상 문자열 (In-place 수정)
-        // --------------------------------------------------------------------------------------------------
+        /// [toUpperCase] 모든 영문 소문자를 대문자로 변환
+        ///
+        /// ASCII 범위 내의 문자만 처리하여 한글 등 멀티바이트 인코딩 깨짐을 방지합니다.
+        /// @param str 변환할 대상 (In-place 수정)
         void toUpperCase(char* str) {
             if (!str) return;
             while (*str) {
@@ -1136,15 +1069,10 @@ namespace cms {
             }
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [toLowerCase] 문자열의 모든 영문 대문자를 소문자로 변환합니다.
-        // ASCII 범위(0~127) 내의 문자만 처리하여 멀티바이트(한글 등) 인코딩 깨짐을 방지합니다.
-        //
-        // --------------------------------------------------------------------------------------------------
-        // Usage: toLowerCase(...);
-        //
-        // @param str 변환할 대상 문자열 (In-place 수정)
-        // --------------------------------------------------------------------------------------------------
+        /// [toLowerCase] 모든 영문 대문자를 소문자로 변환
+        ///
+        /// ASCII 범위 내의 문자만 처리하여 한글 등 멀티바이트 인코딩 깨짐을 방지합니다.
+        /// @param str 변환할 대상 (In-place 수정)
         void toLowerCase(char* str) {
             if (!str) return;
             while (*str) {
@@ -1153,17 +1081,12 @@ namespace cms {
             }
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [endsWith] 문자열이 특정 접미사(suffix)로 끝나는지 확인합니다.
-        // 문자열의 끝 지점에서 접미사 길이만큼 역산한 위치부터 비교를 수행합니다.
-        //
-        // Usage: endsWith(...);
-        //
-        // @param str 검사 대상 문자열
-        // @param suffix 찾을 접미사
-        // @param ignoreCase true일 경우 대소문자 무시
-        // @return true: 일치, false: 불일치
-        // --------------------------------------------------------------------------------------------------
+        /// [endsWith] 접미사 일치 여부 확인
+        ///
+        /// 파일 확장자나 특정 종료 문구로 끝나는지 판별하기 위해 사용합니다.
+        /// @param str 검사 대상
+        /// @param suffix 찾을 접미사
+        /// @param ignoreCase true일 경우 대소문자 무시
         bool endsWith(const char* str, const char* suffix, bool ignoreCase) {
             if (!str || !suffix) return false;
             return endsWith(str, strlen(str), suffix, strlen(suffix), ignoreCase);
@@ -1184,18 +1107,15 @@ namespace cms {
             return *suffix == '\0';
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [replace] 문자열 내의 특정 패턴(from)을 찾아 다른 문자열(to)로 모두 치환합니다.
-        // 치환 후 길이가 변할 경우 memmove를 통해 데이터를 재배치하며, 버퍼 크기를 초과하면 중단됩니다.
-        //
-        // Usage: replace(...);
-        //
-        // @param str 대상 문자열 (In-place 수정)
-        // @param maxLen 버퍼의 물리적 최대 크기
-        // @param from 찾을 패턴
-        // @param to 바꿀 내용
-        // @param ignoreCase true일 경우 대소문자 무시
-        // --------------------------------------------------------------------------------------------------
+        /// [replace] 특정 패턴의 전체 치환
+        ///
+        /// 문자열 내의 모든 'from' 패턴을 찾아 'to' 문자열로 교체합니다.
+        /// 치환 후 길이가 변할 경우 memmove를 통해 데이터를 재배치하며 제자리에서 수정합니다.
+        /// @param str 대상 문자열 (In-place 수정)
+        /// @param curLen 현재 길이
+        /// @param from 찾을 패턴
+        /// @param to 바꿀 내용
+        /// @param ignoreCase true일 경우 대소문자 무시
         size_t replace(char* str, size_t maxLen, size_t curLen, const char* from, const char* to, bool ignoreCase) {
             if (!str || !from || !to || *from == '\0') return curLen;
 
@@ -1240,16 +1160,11 @@ namespace cms {
             return truncated ? sanitizeUtf8(str, maxLen) : currentLen;
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [matches] POSIX 정규표현식을 사용하여 문자열이 특정 패턴에 부합하는지 검사합니다.
-        // 내부적으로 regcomp/regexec를 사용하며, 실행 후 할당된 정규식 자원을 즉시 해제합니다.
-        //
-        // Usage: matches(...);
-        //
-        // @param str 검사 대상 문자열
-        // @param pattern 정규표현식 패턴 (예: "^[0-9]+$")
-        // @return true: 매칭 성공, false: 매칭 실패 또는 패턴 문법 오류
-        // --------------------------------------------------------------------------------------------------
+        /// [matches] POSIX 정규표현식 매칭 검사
+        ///
+        /// 복잡한 텍스트 패턴(이메일, IP 주소 등)과의 일치 여부를 검사합니다.
+        /// @param pattern 정규표현식 패턴
+        /// @return true: 매칭 성공, false: 실패 또는 문법 오류
         bool matches(const char* str, const char* pattern) {
 #ifdef ARDUINO
 // Arduino는 기본 환경에 정규식이 없으므로 POSIX regex를 명시적으로 포함합니다.
@@ -1280,15 +1195,11 @@ namespace cms {
 #endif
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [validateUtf8] 문자열이 올바른 UTF-8 인코딩 규칙을 따르는지 전수 조사합니다.
-        // 각 바이트의 비트 패턴을 분석하여 유효한 1~4바이트 시퀀스인지 검증합니다.
-        //
-        // Usage: validateUtf8(...);
-        //
-        // @param str 검사할 문자열
-        // @return true: 유효한 UTF-8, false: 인코딩 오류(깨진 글자) 발견
-        // --------------------------------------------------------------------------------------------------
+        /// [validateUtf8] UTF-8 인코딩 유효성 검증
+        ///
+        /// 문자열이 표준 UTF-8 규칙을 준수하는지 전수 조사하여 깨진 글자 포함 여부를 판별합니다.
+        /// @param str 검사할 문자열
+        /// @return true: 유효함, false: 인코딩 오류 발견
         bool validateUtf8(const char* str) {
             if (!str) return false;
 
@@ -1345,15 +1256,12 @@ namespace cms {
             return true;
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [sanitizeUtf8] 문자열 내의 깨진 UTF-8 바이트를 찾아 유니코드 대체 문자()로 치환합니다.
-        // 비정상적인 바이트 시퀀스로 인해 터미널 출력이 멈추거나 시스템이 오작동하는 것을 방지합니다.
-        //
-        // Usage: sanitizeUtf8(...);
-        //
-        // @param str 정제할 문자열 (In-place 수정)
-        // @param maxLen 버퍼 최대 크기
-        // --------------------------------------------------------------------------------------------------
+        /// [sanitizeUtf8] 깨진 UTF-8 바이트 정제
+        ///
+        /// 비정상적인 바이트 시퀀스를 유니코드 대체 문자()로 치환하여 터미널 출력 오류를 방지합니다.
+        /// @param str 정제할 문자열 (In-place 수정)
+        /// @param maxLen 버퍼 최대 크기
+        /// @return 정제 후의 최종 바이트 길이
         size_t sanitizeUtf8(char* str, size_t maxLen) {
             if (!str || maxLen == 0) return 0;
 
@@ -1478,18 +1386,15 @@ namespace cms {
             return finalLen;
         }
 
-        // --------------------------------------------------------------------------------------------------
-        // [appendPrintf] 표준 vsnprintf를 대체하는 초경량 포맷팅 엔진입니다.
-        // 스택 사용량을 최소화하며 %s, %d, %ld, %f, %c, %%, %02d 등 필수 포맷만 직접 파싱하여 처리합니다.
-        //
-        // Usage: appendPrintf(...);
-        //
-        // @param buffer 결과가 저장될 버퍼
-        // @param maxLen 버퍼의 최대 크기 (널 종료 문자 포함)
-        // @param format 포맷 문자열
-        // @param args 가변 인자 리스트 (va_list)
-        // @return 포맷팅 완료 후 최종 문자열의 전체 바이트 길이
-        // --------------------------------------------------------------------------------------------------
+        /// [appendPrintf] 초경량 포맷팅 엔진
+        ///
+        /// 표준 vsnprintf의 무거운 스택 사용량을 피하면서 가변 인자 포맷팅 기능을 제공합니다.
+        /// %s, %d, %f 등 필수 지정자만 직접 파싱하여 버퍼 끝에 추가합니다.
+        /// @param buffer 결과 저장 버퍼
+        /// @param curLen [IN/OUT] 현재 길이
+        /// @param format 포맷 문자열
+        /// @param args 가변 인자 리스트
+        /// @return 포맷팅 완료 후 최종 바이트 길이
         int appendPrintf(char* buffer, size_t maxLen, size_t& curLen, const char* format, va_list args) {
             if (!buffer || !format) return 0;
 
